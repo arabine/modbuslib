@@ -76,36 +76,37 @@ void modbus_initialize(uint8_t slave_addr, uint8_t mode, const VIRTUAL_SECTION *
     mb_mapping_size = mapping_size;
 }
 
-uint8_t modbus_lrc_calc(uint8_t *data, uint16_t len )
+uint8_t modbus_lrc_calc(uint8_t *data, uint16_t len)
 {
    uint8_t lrc = 0U;
    int i;
 
-   for (i=0; i<len; i++) {
+   for (i = 0U; i < len; i++)
+   {
       lrc += data[i];
    }
-   lrc = (0xFF-lrc)+1;
+   lrc = (0xFFU - lrc)+1U;
    return(lrc);
 }
 
 
 static uint16_t crc16(uint16_t crc, uint8_t c)
 {
-   crc  = modbus_crc_table[((crc & 255 )^(c))] ;
-   crc ^= crc >> 8;
+   crc  = modbus_crc_table[((crc & 255U )^(c))];
+   crc ^= crc >> 8U;
 
    return crc;
 }
 
 
-uint16_t modbus_crc_calc(uint8_t *debut, uint16_t longueur)
+uint16_t modbus_crc_calc(uint8_t *buffer, uint16_t size)
 {
    uint16_t crc = 0xFFFFU;
-   uint8_t *ptr_caract;
+   uint8_t *ptr;
 
-   for (ptr_caract = debut ; ptr_caract<(debut+longueur) ; ptr_caract++)
+   for (ptr = buffer; ptr < (buffer + size); ptr++)
    {
-        crc = crc16(crc, (*ptr_caract)&0xFF);
+        crc = crc16(crc, (*ptr) & 0xFFU);
    }
    return(crc);
 }
@@ -122,8 +123,7 @@ uint8_t modbus_check_crc(uint8_t *packet, uint16_t length)
     if(mb_mode == MODBUS_ASCII )
     {
        uint8_t lrc = packet[length - 1];
-       /* Test du LRC */
-       if ( lrc != modbus_lrc_calc(packet, length - modbus_crc_size()) )
+       if (lrc != modbus_lrc_calc(packet, length - modbus_crc_size()))
        {
            retcode = 0U;
        }
@@ -132,8 +132,7 @@ uint8_t modbus_check_crc(uint8_t *packet, uint16_t length)
     {
         uint16_t crc = (uint16_t)(packet[length - 1] << 8) +
                (uint16_t)(packet[length - 2]);
-
-        if ( crc != modbus_crc_calc(packet, length - modbus_crc_size()) )
+        if (crc != modbus_crc_calc(packet, length - modbus_crc_size()))
         {
            retcode = 0U;
         }
@@ -175,7 +174,7 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
             valid = 0U;
         }
 
-        if (data_size != (length - 6))
+        if (data_size != (length - 6U))
         {
             valid = 0U;
         }
@@ -185,13 +184,13 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
     }
 
     // basic packet size check
-    if ((data_size < 5) || (data_size > MAX_MODBUS_LENGTH))
+    if ((data_size < 5U) || (data_size > MAX_MODBUS_LENGTH))
     {
         valid = 0U;
     }
 
     // CRC check
-    if (modbus_check_crc(data, data_size) == 0)
+    if (modbus_check_crc(data, data_size) == 0U)
     {
         valid = 0U;
         retcode = MB_PACKET_ERROR_CRC;
@@ -208,7 +207,7 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
             uint16_t rep_size = 0U;
             uint8_t status = modbus_process_pdu(data[1], &data[2], data_size, &rep_size);
 
-            if(dst_addr != 0)
+            if(dst_addr != 0U)
             {
                 if (status == MODBUS_NO_ERROR)
                 {
@@ -217,8 +216,8 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
                     {
                         uint16_t crc = modbus_crc_calc(data, rep_size);
                         // Append CRC in little endian at the end of the packet
-                        data[rep_size] = crc & 0xFF;
-                        data[rep_size + 1] = crc >> 8;
+                        data[rep_size] = crc & 0xFFU;
+                        data[rep_size + 1U] = crc >> 8U;
 
                         // Update size of the reply: data + CRC + function code + slave address
                         retcode = rep_size + 4U;
@@ -226,7 +225,7 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
                     else if (mb_mode == MODBUS_ASCII )
                     {
                         uint8_t lrc = modbus_lrc_calc(data, rep_size);
-                        data[rep_size] = lrc & 0xFF;
+                        data[rep_size] = lrc & 0xFFU;
                         // Update size of the reply: data + LRC + function code + slave address
                         retcode = rep_size + 3U;
                     }
@@ -235,15 +234,15 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
                         // No check bytes in TCP mode
                         // But we must indicate the Modbus frame size in the MBAP
                         rep_size += 2U; // Add function code + slave address
-                        packet[4] = rep_size >> 8;
-                        packet[5] = rep_size & 0xFF;
+                        packet[4] = rep_size >> 8U;
+                        packet[5] = rep_size & 0xFFU;
                         retcode = rep_size + 6U; // Add MBAP size
                     }
                 }
                 else
                 {
                     // Exception code
-                   data[1] |= 0x80;
+                   data[1] |= 0x80U;
                    data[2] = status;
                    retcode = 1U;
                 }
@@ -267,7 +266,8 @@ uint8_t modbus_process_pdu(uint8_t function_code, uint8_t *data, uint16_t len, u
 {
    uint8_t retcode = MODBUS_ILLEGAL_FUNCTION;
 
-   switch (function_code) {
+   switch (function_code)
+   {
       case 3:
       case 4:
         retcode = modbus_function3(data, len, rep_len);
@@ -291,50 +291,60 @@ uint8_t modbus_process_pdu(uint8_t function_code, uint8_t *data, uint16_t len, u
  */
 uint8_t modbus_function3(uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
-   uint16_t nb_words, start_addr;
-   uint16_t i,j;
-   uint16_t data_word;
+    uint16_t nb_words, start_addr;
+    uint16_t i;
+    uint8_t retcode = MODBUS_ILLEGAL_ADDRESS;
 
-   uint8_t retcode = MODBUS_ILLEGAL_DATA_VALUE;
-
-   /**
-    * Test de la longueur de la trame :
-    * adresse 1er mot + nbr de mots
-    *       2                2      = 4 octets
-    */
-   if ( len == 4U )
-   {
+    if (len == 4U)
+    {
         start_addr = get_uint16(data);
         nb_words = get_uint16(data + 2);
-        if ((nb_words <= MAX_WORD_TO_READ) && (nb_words > 0))
+        if ((nb_words <= MAX_WORD_TO_READ) && (nb_words > 0U))
         {
-            // Request is good, prepare reply
-            data[0] = nb_words * 2;
-            *rep_len = 1 + data[0];
-
-            for ( j = 0; j < nb_words; j++ ) {
-               // scan for good section to read, supports ovelapped areas
-               data_word = 0;
-               for ( i = 0; i < mb_mapping_size; i++ )
-               {
-                  if ((start_addr >= mb_mapping[i].addr) && (start_addr < mb_mapping[i+1].addr))
-                  {
-                     // start address is within the section
-                     if (start_addr < (mb_mapping[i].addr + mb_mapping[i].size))
-                     {
-                        data_word = *((uint16_t*)((mb_mapping[i].data + start_addr) - mb_mapping[i].addr));
-                     }
-                     start_addr++;
-                  }
-               }
-               data[1 + j*2] = (data_word >> 8);
-               data[2 + j*2] = data_word & 0xFF;
+            uint16_t section = 0;
+            // Find section
+            for (i = 0U; i < mb_mapping_size; i++ )
+            {
+                if ((start_addr >= mb_mapping[i].addr) && (start_addr < (mb_mapping[i].addr + mb_mapping[i].size)))
+                {
+                    section = i;
+                    retcode = MODBUS_NO_ERROR;
+                    break;
+                }
             }
-            retcode = MODBUS_NO_ERROR;
-        }
-   }
 
-   return (retcode);
+            if (retcode == MODBUS_NO_ERROR)
+            {
+                // Maximum number of words that can be read in this section
+                uint16_t max_words = mb_mapping[section].size - (start_addr - mb_mapping[section].addr);
+                // Set the read limit to the lower number of words to read
+                max_words = (max_words < nb_words) ? max_words : nb_words;
+
+                // Point to the first data to read
+                uint16_t *ptr = mb_mapping[section].data + (start_addr - mb_mapping[section].addr);
+
+                // Read data words as most as possible (limited to section size)
+                for (i = 0U; i < max_words; i++, ptr++ )
+                {
+                    data[1 + i*2] = *ptr >> 8U;
+                    data[2 + i*2] = *ptr & 0xFFU;
+                }
+                // Request is good, prepare reply
+                data[0] = i * 2;
+                *rep_len = 1 + data[0];
+            }
+        }
+        else
+        {
+            retcode = MODBUS_ILLEGAL_DATA_VALUE;
+        }
+    }
+    else
+    {
+        retcode = MODBUS_ILLEGAL_DATA_VALUE;
+    }
+
+    return (retcode);
 }
 
 #if 0

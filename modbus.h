@@ -61,11 +61,13 @@ typedef enum {
    MDB_WRITE_PROTECT
 } SECTION_ACCESS;
 
+#define SECTION_SIZE(a)     (sizeof(a)/2U)
+
 typedef struct {
-   uint16_t *data;  /* pointeur vers la structure */
-   uint16_t addr;   /* adresse modbus */
-   uint16_t size;
-   SECTION_ACCESS access;   /* TRUE si cette zo */
+   uint16_t *data;  // raw data
+   uint16_t addr;   // modbus address in the mapping
+   uint16_t size;   // size of the data, in words
+   SECTION_ACCESS access;   // access type selector
 } VIRTUAL_SECTION;
 
 
