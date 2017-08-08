@@ -57,8 +57,7 @@ extern "C"
 
 typedef enum {
    MDB_READ_ONLY,
-   MDB_READ_WRITE,
-   MDB_WRITE_PROTECT
+   MDB_READ_WRITE
 } SECTION_ACCESS;
 
 #define SECTION_SIZE(a)     (sizeof(a)/2U)
