@@ -15,10 +15,10 @@
 //--------------------------------------------------------------------------
 // Prototypes
 //--------------------------------------------------------------------------
-uint8_t modbus_function3(uint8_t *data, uint16_t len, uint16_t *rep_len);
-uint8_t modbus_function6(uint8_t *data, uint16_t len, uint16_t *rep_len);
-uint8_t modbus_function16(uint8_t *data, uint16_t len, uint16_t *rep_len);
-uint8_t modbus_process_pdu(uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len);
+uint8_t modbus_function3(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len);
+uint8_t modbus_function6(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len);
+uint8_t modbus_function16(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len);
+uint8_t modbus_process_pdu(const modbus_ctx_t *ctx, uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len);
 
 
 //--------------------------------------------------------------------------
@@ -60,24 +60,8 @@ static const uint16_t modbus_crc_table[256] = {
 };
 
 //--------------------------------------------------------------------------
-// Globals
-//--------------------------------------------------------------------------
-static uint8_t mb_slave_address = 0U;
-static uint8_t mb_mode = MODBUS_RTU;
-static const VIRTUAL_SECTION *mb_mapping = NULL;
-static uint32_t mb_mapping_size = 0U;
-
-//--------------------------------------------------------------------------
 // Modbus functions
 //--------------------------------------------------------------------------
-void modbus_initialize(uint8_t slave_addr, uint8_t mode, const VIRTUAL_SECTION *mapping, uint32_t mapping_size)
-{
-    mb_slave_address = slave_addr;
-    mb_mode = mode;
-    mb_mapping = mapping;
-    mb_mapping_size = mapping_size;
-}
-
 uint8_t modbus_lrc_calc(uint8_t *data, uint16_t len)
 {
    uint8_t lrc = 0U;
@@ -113,33 +97,33 @@ uint16_t modbus_crc_calc(uint8_t *buffer, uint16_t size)
    return(crc);
 }
 
-static inline uint8_t modbus_crc_size()
+static inline uint8_t modbus_crc_size(const modbus_ctx_t *ctx)
 {
-    return (mb_mode == MODBUS_ASCII) ? 1U : (mb_mode == MODBUS_TCP) ? 0U : 2U;
+    return (ctx->mode == MODBUS_ASCII) ? 1U : (ctx->mode == MODBUS_TCP) ? 0U : 2U;
 }
 
-uint8_t modbus_check_crc(uint8_t *packet, uint16_t length)
+uint8_t modbus_check_crc(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
 {
     uint8_t retcode = 1U;
 
-    if(mb_mode == MODBUS_ASCII )
+    if(ctx->mode == MODBUS_ASCII )
     {
        uint8_t lrc = packet[length - 1];
-       if (lrc != modbus_lrc_calc(packet, length - modbus_crc_size()))
+       if (lrc != modbus_lrc_calc(packet, length - modbus_crc_size(ctx)))
        {
            retcode = 0U;
        }
     }
-    else if (mb_mode == MODBUS_RTU)
+    else if (ctx->mode == MODBUS_RTU)
     {
         uint16_t crc = (uint16_t)(packet[length - 1] << 8) +
                (uint16_t)(packet[length - 2]);
-        if (crc != modbus_crc_calc(packet, length - modbus_crc_size()))
+        if (crc != modbus_crc_calc(packet, length - modbus_crc_size(ctx)))
         {
            retcode = 0U;
         }
     }
-    else if (mb_mode == MODBUS_TCP)
+    else if (ctx->mode == MODBUS_TCP)
     {
         // no error, no checksum in TCP
     }
@@ -158,14 +142,14 @@ static inline uint16_t get_uint16(uint8_t *data)
 }
 
 
-int32_t modbus_process(uint8_t *packet, uint16_t length)
+int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
 {
     int32_t retcode = MB_PACKET_ERROR_SIZE;
     uint8_t *data = &packet[0];
     uint16_t data_size = length;
     uint8_t valid = 1U;
 
-    if (mb_mode == MODBUS_TCP)
+    if (ctx->mode == MODBUS_TCP)
     {
        // uint16_t trans_id = get_uint16(data); // FIXME: test transaction ID, should be greater than last one
         uint16_t proto_id = get_uint16(data+2);
@@ -192,7 +176,7 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
     }
 
     // CRC check
-    if (modbus_check_crc(data, data_size) == 0U)
+    if (modbus_check_crc(ctx, data, data_size) == 0U)
     {
         valid = 0U;
         retcode = MB_PACKET_ERROR_CRC;
@@ -202,12 +186,12 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
     {
         uint8_t dst_addr = data[0];
 
-        if ((dst_addr == mb_slave_address) || (dst_addr == 0U))
+        if ((dst_addr == ctx->slave_addr) || (dst_addr == 0U))
         {
             // Proccess request, size is packet length minus : slave addr + function code + CRC
-            data_size -= (2U + modbus_crc_size());
+            data_size -= (2U + modbus_crc_size(ctx));
             uint16_t rep_size = 0U;
-            uint8_t status = modbus_process_pdu(data[1], &data[2], data_size, &rep_size);
+            uint8_t status = modbus_process_pdu(ctx, data[1], &data[2], data_size, &rep_size);
 
             if(dst_addr != 0U)
             {
@@ -220,7 +204,7 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
                 }
 
                 // No broadcast, reply
-                if (mb_mode == MODBUS_RTU )
+                if (ctx->mode == MODBUS_RTU )
                 {
                     uint16_t crc = modbus_crc_calc(data, rep_size);
                     // Append CRC in little endian at the end of the packet
@@ -230,14 +214,14 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
                     // Update size of the reply: data + CRC + function code + slave address
                     retcode = rep_size + 4U;
                 }
-                else if (mb_mode == MODBUS_ASCII )
+                else if (ctx->mode == MODBUS_ASCII )
                 {
                     uint8_t lrc = modbus_lrc_calc(data, rep_size);
                     data[rep_size] = lrc & 0xFFU;
                     // Update size of the reply: data + LRC + function code + slave address
                     retcode = rep_size + 3U;
                 }
-                else if (mb_mode == MODBUS_TCP )
+                else if (ctx->mode == MODBUS_TCP )
                 {
                     // No check bytes in TCP mode
                     // But we must indicate the Modbus frame size in the MBAP
@@ -262,7 +246,7 @@ int32_t modbus_process(uint8_t *packet, uint16_t length)
     return retcode;
 }
 
-uint8_t modbus_process_pdu(uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len)
+uint8_t modbus_process_pdu(const modbus_ctx_t *ctx, uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
     uint8_t retcode = MODBUS_ILLEGAL_FUNCTION;
 
@@ -270,13 +254,13 @@ uint8_t modbus_process_pdu(uint8_t function_code, uint8_t *data, uint16_t len, u
     {
     case 3:
     case 4:
-        retcode = modbus_function3(data, len, rep_len);
+        retcode = modbus_function3(ctx, data, len, rep_len);
         break;
     case 6:
-        retcode = modbus_function6(data, len, rep_len);
+        retcode = modbus_function6(ctx, data, len, rep_len);
         break;
     case 16:
-        retcode = modbus_function16(data, len, rep_len);
+        retcode = modbus_function16(ctx, data, len, rep_len);
         break;
         // TODO: allow custom functions (call user defined function)
     default:
@@ -285,23 +269,25 @@ uint8_t modbus_process_pdu(uint8_t function_code, uint8_t *data, uint16_t len, u
     return(retcode);
 }
 
-static inline uint8_t is_in_section(uint16_t addr, uint8_t sec)
+static inline uint8_t is_in_section(const modbus_ctx_t *ctx, uint16_t addr, uint8_t sec)
 {
     uint8_t ret = 0U;
-    if ((addr >= mb_mapping[sec].addr) && (addr < (mb_mapping[sec].addr + mb_mapping[sec].size)))
+    if ((addr >= ctx->mapping[sec].addr) && (addr < (ctx->mapping[sec].addr + ctx->mapping[sec].size)))
     {
         ret = 1U;
     }
     return ret;
 }
 
-static inline uint8_t find_section(uint16_t addr, uint16_t *section)
+static inline uint8_t find_section(const modbus_ctx_t *ctx, uint16_t addr, uint16_t *section)
 {
     uint8_t retcode = MODBUS_ILLEGAL_ADDRESS;
+    uint16_t i;
+    
     // Find section
-    for (uint16_t i = 0U; i < mb_mapping_size; i++)
+    for (i = 0U; i < ctx->mapping_size; i++)
     {
-        if (is_in_section(addr, i))
+        if (is_in_section(ctx, addr, i))
         {
             *section = i;
             retcode = MODBUS_NO_ERROR;
@@ -312,10 +298,10 @@ static inline uint8_t find_section(uint16_t addr, uint16_t *section)
     return retcode;
 }
 
-static inline uint16_t clamp(uint16_t section, uint16_t start_addr, uint16_t nb_words)
+static inline uint16_t clamp(const modbus_ctx_t *ctx, uint16_t section, uint16_t start_addr, uint16_t nb_words)
 {
     // Maximum number of words that can be accessed in this section
-    uint16_t max_words = mb_mapping[section].size - (start_addr - mb_mapping[section].addr);
+    uint16_t max_words = ctx->mapping[section].size - (start_addr - ctx->mapping[section].addr);
     // Set the limit to the lower number of words to read ro write
     max_words = (max_words < nb_words) ? max_words : nb_words;
 
@@ -329,7 +315,7 @@ static inline uint16_t clamp(uint16_t section, uint16_t start_addr, uint16_t nb_
  * @return == 0 : OK
  *          > 0 : Modbus exception code
  */
-uint8_t modbus_function3(uint8_t *data, uint16_t len, uint16_t *rep_len)
+uint8_t modbus_function3(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
     uint16_t nb_words, start_addr;
     uint16_t i;
@@ -343,13 +329,13 @@ uint8_t modbus_function3(uint8_t *data, uint16_t len, uint16_t *rep_len)
         {
             uint16_t section = 0;
 
-            if (find_section(start_addr, &section) == MODBUS_NO_ERROR)
+            if (find_section(ctx, start_addr, &section) == MODBUS_NO_ERROR)
             {
                 // Maximum number of words that can be read in this section
-                nb_words = clamp(section, start_addr, nb_words);
+                nb_words = clamp(ctx, section, start_addr, nb_words);
 
                 // Point to the first data to read
-                uint16_t *ptr = mb_mapping[section].data + (start_addr - mb_mapping[section].addr);
+                uint16_t *ptr = ctx->mapping[section].data + (start_addr - ctx->mapping[section].addr);
 
                 // Read data words as most as possible (limited to section size)
                 for (i = 0U; i < nb_words; i++, ptr++ )
@@ -376,20 +362,20 @@ uint8_t modbus_function3(uint8_t *data, uint16_t len, uint16_t *rep_len)
     return (retcode);
 }
 
-uint8_t modbus_write(uint8_t *data, uint16_t start_addr, uint16_t nb_words, uint16_t *rep_len)
+uint8_t modbus_write(const modbus_ctx_t *ctx, uint8_t *data, uint16_t start_addr, uint16_t nb_words, uint16_t *rep_len)
 {
     uint16_t section = 0;
     uint8_t i;
 
-    uint8_t ret = find_section(start_addr, &section);
+    uint8_t ret = find_section(ctx, start_addr, &section);
     if ((ret == MODBUS_NO_ERROR) &&
-       (mb_mapping[section].access == MDB_READ_WRITE))
+       (ctx->mapping[section].access == MDB_READ_WRITE))
     {
         // Maximum number of words that can be written in this section
-        nb_words = clamp(section, start_addr, nb_words);
+        nb_words = clamp(ctx, section, start_addr, nb_words);
 
         // Point to the first data to read
-        uint16_t *ptr = mb_mapping[section].data + (start_addr - mb_mapping[section].addr);
+        uint16_t *ptr = ctx->mapping[section].data + (start_addr - ctx->mapping[section].addr);
 
         for(i = 0U; i < nb_words; i++ )
         {
@@ -408,7 +394,7 @@ uint8_t modbus_write(uint8_t *data, uint16_t start_addr, uint16_t nb_words, uint
 }
 
 
-uint8_t modbus_function6(uint8_t *data, uint16_t len, uint16_t *rep_len)
+uint8_t modbus_function6(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
     uint16_t ret = MODBUS_ILLEGAL_DATA_VALUE;
     uint16_t start_addr;
@@ -417,12 +403,12 @@ uint8_t modbus_function6(uint8_t *data, uint16_t len, uint16_t *rep_len)
     if (len == 4U)
     {
         start_addr = (uint16_t)(data[0] << 8) + data[1];
-        ret = modbus_write(&data[2], start_addr, 1U, rep_len);
+        ret = modbus_write(ctx, &data[2], start_addr, 1U, rep_len);
     }
     return (ret);
 }
 
-uint8_t modbus_function16(uint8_t *data, uint16_t len, uint16_t *rep_len)
+uint8_t modbus_function16(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
    uint16_t ret = MODBUS_ILLEGAL_DATA_VALUE;
    uint16_t nb_words, start_addr;
@@ -438,7 +424,7 @@ uint8_t modbus_function16(uint8_t *data, uint16_t len, uint16_t *rep_len)
            (nb_words != 0) &&
            (nb_words <= MAX_WORD_TO_WRITE))
        {
-            ret = modbus_write(&data[5], start_addr, nb_words, rep_len);
+            ret = modbus_write(ctx, &data[5], start_addr, nb_words, rep_len);
        }
    }
    return (ret);
@@ -447,31 +433,35 @@ uint8_t modbus_function16(uint8_t *data, uint16_t len, uint16_t *rep_len)
 
 #ifdef AUTOTEST
 
-struct ReadOnlyData
+#include <string.h>
+#include <stdio.h>
+
+struct app_data_t
 {
     uint16_t hop;
     uint16_t hip;
-};
+} app_data = {1000U, 4U};
 
-ReadOnlyData data1 = {
-  1000, 4
-};
 
-static const VIRTUAL_SECTION mapping[] = {
-   { (uint16_t *)&data1, 0x0000, SECTION_SIZE(ReadOnlyData), MDB_READ_WRITE }
-};
+static const modbus_section_t section = { (uint16_t *)&app_data, 0x0000U, SECTION_SIZE(app_data), MDB_READ_WRITE };
 
-#define NB_SECTIONS  (sizeof(mapping)/sizeof(mapping[0]))
-
+const modbus_ctx_t context = { 12U, MODBUS_TCP, &section, 1U };
 
 
 int main(void)
 {
     static const uint8_t read_holding[] = { 0x00, 0x12, 0x00, 0x00, 0x00, 0x06, 0x0C, 0x03, 0x00, 0x00, 0x00, 0x0A };
 
-    modbus_initialize(12, MODBUS_TCP, mapping, NB_SECTIONS);
+    uint8_t data[MAX_DATA_LENGTH];
 
-    int32_t ret = modbus_process(data, size);
+    memcpy(data, read_holding, sizeof(read_holding));
+
+    int32_t ret = modbus_process(&context, data, sizeof(read_holding));
+
+    if (ret >= 0)
+    {
+        printf("Success! response size is %d bytes.\r\n", (int)ret);
+    }
 }
 #endif
 

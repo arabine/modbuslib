@@ -48,17 +48,16 @@ extern "C"
 #define MAX_DATA_LENGTH       253
 
 
-/* Mode : RTU ou ASCII */
-#define MODBUS_RTU   0U
-#define MODBUS_ASCII 1U
-#define MODBUS_TCP   2U
-
-
+typedef enum {
+   MODBUS_RTU,
+   MODBUS_ASCII,
+   MODBUS_TCP
+} modbus_mode_t;
 
 typedef enum {
    MDB_READ_ONLY,
    MDB_READ_WRITE
-} SECTION_ACCESS;
+} modbus_access_t;
 
 #define SECTION_SIZE(a)     (sizeof(a)/2U)
 
@@ -66,14 +65,20 @@ typedef struct {
    uint16_t *data;  // raw data
    uint16_t addr;   // modbus address in the mapping
    uint16_t size;   // size of the data, in words
-   SECTION_ACCESS access;   // access type selector
-} VIRTUAL_SECTION;
+   modbus_access_t access;   // access type selector
+} modbus_section_t;
+
+typedef struct {
+	uint8_t slave_addr;
+	modbus_mode_t  mode;
+	const modbus_section_t *mapping;
+	uint16_t mapping_size;
+} modbus_ctx_t;
 
 
 //--------------------------------------------------------------------------
 // API 
 //--------------------------------------------------------------------------
-void modbus_initialize(uint8_t slave_addr, uint8_t mode /* ascii or rtu */, const VIRTUAL_SECTION *mapping, uint32_t mapping_size /* number of sections */);
 
 /**
  * @brief modbus_process
@@ -82,7 +87,7 @@ void modbus_initialize(uint8_t slave_addr, uint8_t mode /* ascii or rtu */, cons
  *         == 0 : Ok, no reply to send
  *         > 0  : ok, size of the reply
  */
-int32_t modbus_process(uint8_t *packet, uint16_t length);
+int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length);
 
 #ifdef __cplusplus
 }
