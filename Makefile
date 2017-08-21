@@ -1,6 +1,6 @@
 # Modbus library tiny makefile
 
 all:
-	gcc -DAUTOTEST -o modbus modbus.c
+	gcc -O0 -g -DAUTOTEST -o modbus modbus.c
 
 

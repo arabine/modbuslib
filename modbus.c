@@ -75,25 +75,18 @@ uint8_t modbus_lrc_calc(uint8_t *data, uint16_t len)
    return(lrc);
 }
 
-
-static uint16_t crc16(uint16_t crc, uint8_t c)
-{
-   crc  = modbus_crc_table[((crc & 255U )^(c))];
-   crc ^= crc >> 8U;
-
-   return crc;
-}
-
-
 uint16_t modbus_crc_calc(uint8_t *buffer, uint16_t size)
 {
-   uint16_t crc = 0xFFFFU;
-   uint8_t *ptr;
+   uint16_t crc = 0xFFFFU; 
+   uint8_t nTemp;
 
-   for (ptr = buffer; ptr < (buffer + size); ptr++)
-   {
-        crc = crc16(crc, (*ptr) & 0xFFU);
-   }
+    while (size--)
+    {
+        nTemp = *buffer++ ^ crc;
+        crc >>= 8;
+        crc  ^= modbus_crc_table[(nTemp & 0xFFU)];
+    }
+
    return(crc);
 }
 
@@ -445,23 +438,46 @@ struct app_data_t
 
 static const modbus_section_t section = { (uint16_t *)&app_data, 0x0000U, SECTION_SIZE(app_data), MDB_READ_WRITE };
 
-const modbus_ctx_t context = { 12U, MODBUS_TCP, &section, 1U };
-
+const modbus_ctx_t contextTcp = { 12U, MODBUS_TCP, &section, 1U };
+const modbus_ctx_t contextRtu = { 12U, MODBUS_RTU, &section, 1U };
 
 int main(void)
 {
-    static const uint8_t read_holding[] = { 0x00, 0x12, 0x00, 0x00, 0x00, 0x06, 0x0C, 0x03, 0x00, 0x00, 0x00, 0x0A };
+    static const uint8_t read_holding_tcp[] = { 0x00, 0x12, 0x00, 0x00, 0x00, 0x06, 0x0C, 0x03, 0x00, 0x00, 0x00, 0x0A };
+    
+    static const uint8_t read_holding_rtu[] = { 0x0C, 0x03, 0x00, 0x00, 0x00, 0x0A, 0xC4, 0xD0 };
 
     uint8_t data[MAX_DATA_LENGTH];
 
-    memcpy(data, read_holding, sizeof(read_holding));
+    uint32_t size = sizeof(read_holding_tcp);
+    memcpy(data, read_holding_tcp, size);
 
-    int32_t ret = modbus_process(&context, data, sizeof(read_holding));
+    int32_t ret = modbus_process(&contextTcp, data, size);
 
     if (ret >= 0)
     {
-        printf("Success! response size is %d bytes.\r\n", (int)ret);
+        printf("Success! response size of ModbusTCP is %d bytes.\r\n", (int)ret);
     }
+    else
+    {
+        printf("Failure :( response size of ModbusTCP is %d.\r\n", (int)ret);
+    }
+    
+    
+    size = sizeof(read_holding_rtu);
+    memcpy(data, read_holding_rtu, size);
+
+    ret = modbus_process(&contextRtu, data, size);
+
+    if (ret >= 0)
+    {
+        printf("Success! response size of ModbusRTU is %d bytes.\r\n", (int)ret);
+    }
+    else
+    {
+        printf("Failure :( response size of ModbusRTU is %d.\r\n", (int)ret);
+    }
+    
 }
 #endif
 
