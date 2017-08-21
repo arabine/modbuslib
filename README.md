@@ -12,14 +12,13 @@ They are many existing Modbus libraries out there. This one will differ from the
 
 ## Features
 
-  * Modbus TCP, RTU and ASCII (maybe brocken) packets
+  * Modbus TCP, RTU and ASCII (maybe broken) packets
   * Slave functions 3, 4, 6 and 16
   * Exception
   
 ## TODO
 
   * More unit tests
-  * A
   * Coils support
   * Master support
 
