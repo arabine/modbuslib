@@ -201,8 +201,8 @@ int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length
                 {
                     uint16_t crc = modbus_crc_calc(data, rep_size);
                     // Append CRC in little endian at the end of the packet
-                    data[rep_size] = crc & 0xFFU;
-                    data[rep_size + 1U] = crc >> 8U;
+                    data[2 + rep_size] = crc & 0xFFU;
+                    data[2 + rep_size + 1U] = crc >> 8U;
 
                     // Update size of the reply: data + CRC + function code + slave address
                     retcode = rep_size + 4U;
