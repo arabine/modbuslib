@@ -199,7 +199,7 @@ int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length
                 // No broadcast, reply
                 if (ctx->mode == MODBUS_RTU )
                 {
-                    uint16_t crc = modbus_crc_calc(data, rep_size);
+                    uint16_t crc = modbus_crc_calc(data, 2+rep_size);
                     // Append CRC in little endian at the end of the packet
                     data[2 + rep_size] = crc & 0xFFU;
                     data[2 + rep_size + 1U] = crc >> 8U;
@@ -209,7 +209,7 @@ int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length
                 }
                 else if (ctx->mode == MODBUS_ASCII )
                 {
-                    uint8_t lrc = modbus_lrc_calc(data, rep_size);
+                    uint8_t lrc = modbus_lrc_calc(data, 2+rep_size);
                     data[rep_size] = lrc & 0xFFU;
                     // Update size of the reply: data + LRC + function code + slave address
                     retcode = rep_size + 3U;
@@ -428,24 +428,35 @@ uint8_t modbus_function16(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, 
 
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 struct app_data_t
 {
-    uint16_t hop;
-    uint16_t hip;
-} app_data = {1000U, 4U};
+    uint16_t array[200];
+} app_data;
+
+void hexdump(void *mem, unsigned int len);
 
 
 static const modbus_section_t section = { (uint16_t *)&app_data, 0x0000U, SECTION_SIZE(app_data), MDB_READ_WRITE };
 
 const modbus_ctx_t contextTcp = { 12U, MODBUS_TCP, &section, 1U };
-const modbus_ctx_t contextRtu = { 12U, MODBUS_RTU, &section, 1U };
+const modbus_ctx_t contextRtu = { 17U, MODBUS_RTU, &section, 1U };
+
 
 int main(void)
 {
+    app_data.array[107] = 0xAE41;
+    app_data.array[108] = 0x5652;
+    app_data.array[109] = 0x4340;
+    
     static const uint8_t read_holding_tcp[] = { 0x00, 0x12, 0x00, 0x00, 0x00, 0x06, 0x0C, 0x03, 0x00, 0x00, 0x00, 0x0A };
     
-    static const uint8_t read_holding_rtu[] = { 0x0C, 0x03, 0x00, 0x00, 0x00, 0x0A, 0xC4, 0xD0 };
+    static const uint8_t read_holding_rtu[] = { 0x11, 0x03, 0x00, 0x6B, 0x00, 0x03, 0x76, 0x87 };
+    static const uint8_t read_holding_rtu_response[] = { 0x11, 0x03, 0x06, 0xAE, 0x41, 0x56, 0x52, 0x43, 0x40, 0x49, 0xAD };
+    
+    static const uint8_t write_holding_rtu[] = { 0x11, 0x10, 0x00, 0x01, 0x00, 0x02, 0x04, 0x00, 0x0A, 0x01, 0x02, 0xC6, 0xF0 };
+    static const uint8_t write_response[] = { 0x11, 0x10, 0x00, 0x01, 0x00, 0x02, 0x12, 0x98 };
 
     uint8_t data[MAX_DATA_LENGTH];
 
@@ -471,13 +482,93 @@ int main(void)
 
     if (ret >= 0)
     {
-        printf("Success! response size of ModbusRTU is %d bytes.\r\n", (int)ret);
+        if (memcmp(data, read_holding_rtu_response, sizeof(read_holding_rtu_response)) == 0)
+        {
+            printf("Success! response size of ModbusRTU read is %d bytes.\r\n", (int)ret);
+        }
+        else
+        {
+            printf("Failure, read bad response.\r\n");
+            hexdump(data, ret);
+        }
     }
     else
     {
-        printf("Failure :( response size of ModbusRTU is %d.\r\n", (int)ret);
+        printf("Failure :( response size of ModbusRTU read is %d.\r\n", (int)ret);
     }
     
+    size = sizeof(write_holding_rtu);
+    memcpy(data, write_holding_rtu, size);
+
+    ret = modbus_process(&contextRtu, data, size);
+
+    if (ret >= 0)
+    {
+        if (memcmp(data, write_response, sizeof(write_response)) == 0)
+        {
+            printf("Success! response size of ModbusRTU write is %d bytes.\r\n", (int)ret);
+        }
+        else
+        {
+            printf("Failure, Bad response.\r\n");
+            hexdump(data, ret);
+        }
+    }
+    else
+    {
+        printf("Failure :( response size of ModbusRTU write is %d.\r\n", (int)ret);
+    }
+    
+}
+
+
+#ifndef HEXDUMP_COLS
+#define HEXDUMP_COLS 8
+#endif
+
+void hexdump(void *mem, unsigned int len)
+{
+        unsigned int i, j;
+
+        for(i = 0; i < len + ((len % HEXDUMP_COLS) ? (HEXDUMP_COLS - len % HEXDUMP_COLS) : 0); i++)
+        {
+                /* print offset */
+                if(i % HEXDUMP_COLS == 0)
+                {
+                        printf("0x%06x: ", i);
+                }
+
+                /* print hex data */
+                if(i < len)
+                {
+                        printf("%02x ", 0xFF & ((char*)mem)[i]);
+                }
+                else /* end of block, just aligning for ASCII dump */
+                {
+                        printf("   ");
+                }
+
+                /* print ASCII dump */
+                if(i % HEXDUMP_COLS == (HEXDUMP_COLS - 1))
+                {
+                        for(j = i - (HEXDUMP_COLS - 1); j <= i; j++)
+                        {
+                                if(j >= len) /* end of block, not really printing */
+                                {
+                                        putchar(' ');
+                                }
+                                else if(isprint(((char*)mem)[j])) /* printable char */
+                                {
+                                        putchar(0xFF & ((char*)mem)[j]);
+                                }
+                                else /* other char */
+                                {
+                                        putchar('.');
+                                }
+                        }
+                        putchar('\n');
+                }
+        }
 }
 #endif
 
