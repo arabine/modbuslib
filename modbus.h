@@ -77,7 +77,7 @@ typedef struct {
 
 
 //--------------------------------------------------------------------------
-// API 
+// SLAVE (SERVER) API
 //--------------------------------------------------------------------------
 
 /**
@@ -88,6 +88,16 @@ typedef struct {
  *         > 0  : ok, size of the reply
  */
 int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length);
+
+//--------------------------------------------------------------------------
+// MASTER (CLIENT) API
+//--------------------------------------------------------------------------
+
+/**
+  * @brief modbus_func3_request
+  * @param
+  */
+int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size);
 
 #ifdef __cplusplus
 }

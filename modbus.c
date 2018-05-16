@@ -134,6 +134,40 @@ static inline uint16_t get_uint16(uint8_t *data)
     return val;
 }
 
+static inline void set_uint16_le(uint8_t *data, uint16_t word)
+{
+    data[0] = word & 0xFFU;
+    data[1] = word >> 8U;
+}
+
+static inline void set_uint16_be(uint8_t *data, uint16_t word)
+{
+    data[0] = word >> 8U;
+    data[1] = word & 0xFFU;
+}
+
+int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size)
+{
+    int32_t retcode = MB_PACKET_ERROR_SIZE;
+
+    if (mode == MODBUS_TCP)
+    {
+     // TODO
+    }
+    else
+    {
+        packet[0] = slave;
+        packet[1] = 0x03U;
+        set_uint16_be(&packet[2], start_addr);
+        set_uint16_be(&packet[4], size);
+        uint16_t crc = modbus_crc_calc(packet, 6);
+        set_uint16_le(&packet[6], crc);
+        retcode = 8U;
+    }
+
+    return retcode;
+}
+
 
 int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
 {
