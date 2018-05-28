@@ -55,8 +55,9 @@ typedef enum {
 } modbus_mode_t;
 
 typedef enum {
-   MDB_READ_ONLY,
-   MDB_READ_WRITE
+   MDB_NO_ACCESS,
+   MDB_READ,
+   MDB_WRITE
 } modbus_access_t;
 
 #define SECTION_SIZE(a)     (sizeof(a)/2U)
@@ -68,11 +69,19 @@ typedef struct {
    modbus_access_t access;   // access type selector
 } modbus_section_t;
 
+// Optional callbacks, to set/get the memory in a custom way
+typedef uint16_t (*get_reg)(uint16_t reg);
+typedef void (*set_reg)(uint16_t reg, uint16_t val);
+
 typedef struct {
 	uint8_t slave_addr;
 	modbus_mode_t  mode;
 	const modbus_section_t *mapping;
-	uint16_t mapping_size;
+    uint16_t number_of_sections;
+    uint8_t result;
+    modbus_access_t access;
+    get_reg get_cb;
+    set_reg set_cb;
 } modbus_ctx_t;
 
 
@@ -87,7 +96,7 @@ typedef struct {
  *         == 0 : Ok, no reply to send
  *         > 0  : ok, size of the reply
  */
-int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length);
+int32_t modbus_process(modbus_ctx_t *ctx, uint8_t *packet, uint16_t length);
 
 //--------------------------------------------------------------------------
 // MASTER (CLIENT) API

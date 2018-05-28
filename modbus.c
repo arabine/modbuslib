@@ -18,7 +18,7 @@
 uint8_t modbus_function3(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len);
 uint8_t modbus_function6(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len);
 uint8_t modbus_function16(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len);
-uint8_t modbus_process_pdu(const modbus_ctx_t *ctx, uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len);
+uint8_t modbus_process_pdu(modbus_ctx_t *ctx, uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len);
 
 
 //--------------------------------------------------------------------------
@@ -169,7 +169,7 @@ int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave,
 }
 
 
-int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
+int32_t modbus_process(modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
 {
     int32_t retcode = MB_PACKET_ERROR_SIZE;
     uint8_t *data = &packet[0];
@@ -218,15 +218,15 @@ int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length
             // Proccess request, size is packet length minus : slave addr + function code + CRC
             data_size -= (2U + modbus_crc_size(ctx));
             uint16_t rep_size = 0U;
-            uint8_t status = modbus_process_pdu(ctx, data[1], &data[2], data_size, &rep_size);
+            ctx->result = modbus_process_pdu(ctx, data[1], &data[2], data_size, &rep_size);
 
             if(dst_addr != 0U)
             {
-                if (status != MODBUS_NO_ERROR)
+                if (ctx->result != MODBUS_NO_ERROR)
                 {
                     // Exception code
                    data[1] |= 0x80U;
-                   data[2] = status;
+                   data[2] = ctx->result;
                    rep_size = 1U;
                 }
 
@@ -273,7 +273,7 @@ int32_t modbus_process(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length
     return retcode;
 }
 
-uint8_t modbus_process_pdu(const modbus_ctx_t *ctx, uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len)
+uint8_t modbus_process_pdu(modbus_ctx_t *ctx, uint8_t function_code, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
     uint8_t retcode = MODBUS_ILLEGAL_FUNCTION;
 
@@ -282,12 +282,15 @@ uint8_t modbus_process_pdu(const modbus_ctx_t *ctx, uint8_t function_code, uint8
     case 3:
     case 4:
         retcode = modbus_function3(ctx, data, len, rep_len);
+        ctx->access = MDB_READ;
         break;
     case 6:
         retcode = modbus_function6(ctx, data, len, rep_len);
+        ctx->access = MDB_WRITE;
         break;
     case 16:
         retcode = modbus_function16(ctx, data, len, rep_len);
+        ctx->access = MDB_WRITE;
         break;
         // TODO: allow custom functions (call user defined function)
     default:
@@ -312,7 +315,7 @@ static inline uint8_t find_section(const modbus_ctx_t *ctx, uint16_t addr, uint1
     uint16_t i;
     
     // Find section
-    for (i = 0U; i < ctx->mapping_size; i++)
+    for (i = 0U; i < ctx->number_of_sections; i++)
     {
         if (is_in_section(ctx, addr, i))
         {
@@ -354,27 +357,54 @@ uint8_t modbus_function3(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, u
         nb_words = get_uint16(data + 2);
         if ((nb_words <= MAX_WORD_TO_READ) && (nb_words > 0U))
         {
-            uint16_t section = 0;
+            uint8_t use_mapping = (ctx->mapping == NULL) ? 0U : 1U;
+            uint16_t *ptr = NULL;
 
-            if (find_section(ctx, start_addr, &section) == MODBUS_NO_ERROR)
+            if (use_mapping)
             {
-                // Maximum number of words that can be read in this section
-                nb_words = clamp(ctx, section, start_addr, nb_words);
+                uint16_t section = 0;
 
-                // Point to the first data to read
-                uint16_t *ptr = ctx->mapping[section].data + (start_addr - ctx->mapping[section].addr);
-
-                // Read data words as most as possible (limited to section size)
-                for (i = 0U; i < nb_words; i++, ptr++ )
+                if (find_section(ctx, start_addr, &section) == MODBUS_NO_ERROR)
                 {
-                    data[1 + i*2] = *ptr >> 8U;
-                    data[2 + i*2] = *ptr & 0xFFU;
+                    // Maximum number of words that can be read in this section
+                    nb_words = clamp(ctx, section, start_addr, nb_words);
                 }
-                // Request is good, prepare reply
-                data[0] = i * 2;
-                *rep_len = 1 + data[0];
-                retcode = MODBUS_NO_ERROR;
+                ptr = ctx->mapping[section].data + (start_addr - ctx->mapping[section].addr);
             }
+
+            // Read data words as most as possible (limited to section size)
+            for (i = 0U; i < nb_words; i++)
+            {
+                uint16_t value = 0xFFFFU;
+                if (use_mapping && ptr)
+                {
+                    value = *ptr;
+                }
+                else if (ctx->get_cb != NULL)
+                {
+                    value = ctx->get_cb(start_addr + i);
+                }
+                else
+                {
+                    retcode = MODBUS_ILLEGAL_ADDRESS;
+                    break;
+                }
+
+                // Direct memory read
+                data[1 + i*2] = value >> 8U;
+                data[2 + i*2] = value & 0xFFU;
+
+                if (use_mapping && ptr)
+                {
+                    ptr++;
+                }
+            }
+
+            // Request is good, prepare reply
+            data[0] = i * 2;
+            *rep_len = 1 + data[0];
+            retcode = MODBUS_NO_ERROR;
+
         }
         else
         {
@@ -393,29 +423,44 @@ uint8_t modbus_write(const modbus_ctx_t *ctx, uint8_t *data, uint16_t start_addr
 {
     uint16_t section = 0;
     uint8_t i;
+    uint8_t ret = MODBUS_ILLEGAL_ADDRESS;
+    uint8_t use_mapping = (ctx->mapping == NULL) ? 0U : 1U;
+    uint16_t *ptr = NULL;
 
-    uint8_t ret = find_section(ctx, start_addr, &section);
-    if ((ret == MODBUS_NO_ERROR) &&
-       (ctx->mapping[section].access == MDB_READ_WRITE))
+    if (use_mapping)
     {
-        // Maximum number of words that can be written in this section
-        nb_words = clamp(ctx, section, start_addr, nb_words);
-
-        // Point to the first data to read
-        uint16_t *ptr = ctx->mapping[section].data + (start_addr - ctx->mapping[section].addr);
-
-        for(i = 0U; i < nb_words; i++ )
+        ret = find_section(ctx, start_addr, &section);
+        if ((ret == MODBUS_NO_ERROR) &&
+           (ctx->mapping[section].access == MDB_WRITE))
         {
-            (*ptr++) = (uint16_t)( data[2*i] << 8) | data[(2*i) + 1];
-        }
+            // Maximum number of words that can be written in this section
+            nb_words = clamp(ctx, section, start_addr, nb_words);
 
-        ret = MODBUS_NO_ERROR;
-        *rep_len = 4; // raw data size
+            // Point to the first data to read
+            ptr = ctx->mapping[section].data + (start_addr - ctx->mapping[section].addr);
+        }
     }
-    else
+
+    for(i = 0U; i < nb_words; i++ )
     {
-        ret = MODBUS_ILLEGAL_ADDRESS;
+        uint16_t val = (uint16_t)( data[2*i] << 8) | data[(2*i) + 1];
+        if (use_mapping && ptr)
+        {
+            (*ptr++) = val;
+        }
+        else if (ctx->set_cb != NULL)
+        {
+            ctx->set_cb(start_addr + i, val);
+        }
+        else
+        {
+            ret = MODBUS_ILLEGAL_ADDRESS;
+            break;
+        }
     }
+
+    ret = MODBUS_NO_ERROR;
+    *rep_len = 4; // raw data size
 
     return ret;
 }
