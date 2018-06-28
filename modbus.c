@@ -197,78 +197,73 @@ int32_t modbus_process(modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
     }
 
     // basic packet size check
-    if ((data_size < 5U) || (data_size > MAX_MODBUS_LENGTH))
+    if ((data_size >= 5U) && (data_size <= MAX_MODBUS_LENGTH) && valid)
     {
-        valid = 0U;
-    }
-
-    // CRC check
-    if (modbus_check_crc(ctx, data, data_size) == 0U)
-    {
-        valid = 0U;
-        retcode = MB_PACKET_ERROR_CRC;
-    }
-
-    if (valid)
-    {
-        uint8_t dst_addr = data[0];
-
-        if ((dst_addr == ctx->slave_addr) || (dst_addr == 0U))
+        // CRC check
+        if (modbus_check_crc(ctx, data, data_size))
         {
-            // Proccess request, size is packet length minus : slave addr + function code + CRC
-            data_size -= (2U + modbus_crc_size(ctx));
-            uint16_t rep_size = 0U;
-            ctx->result = modbus_process_pdu(ctx, data[1], &data[2], data_size, &rep_size);
+            uint8_t dst_addr = data[0];
 
-            if(dst_addr != 0U)
+            if ((dst_addr == ctx->slave_addr) || (dst_addr == 0U))
             {
-                if (ctx->result != MODBUS_NO_ERROR)
-                {
-                    // Exception code
-                   data[1] |= 0x80U;
-                   data[2] = ctx->result;
-                   rep_size = 1U;
-                }
+                // Proccess request, size is packet length minus : slave addr + function code + CRC
+                data_size -= (2U + modbus_crc_size(ctx));
+                uint16_t rep_size = 0U;
+                ctx->result = modbus_process_pdu(ctx, data[1], &data[2], data_size, &rep_size);
 
-                // No broadcast, reply
-                if (ctx->mode == MODBUS_RTU )
+                if(dst_addr != 0U)
                 {
-                    uint16_t crc = modbus_crc_calc(data, 2+rep_size);
-                    // Append CRC in little endian at the end of the packet
-                    data[2 + rep_size] = crc & 0xFFU;
-                    data[2 + rep_size + 1U] = crc >> 8U;
+                    if (ctx->result != MODBUS_NO_ERROR)
+                    {
+                        // Exception code
+                       data[1] |= 0x80U;
+                       data[2] = ctx->result;
+                       rep_size = 1U;
+                    }
 
-                    // Update size of the reply: data + CRC + function code + slave address
-                    retcode = rep_size + 4U;
+                    // No broadcast, reply
+                    if (ctx->mode == MODBUS_RTU )
+                    {
+                        uint16_t crc = modbus_crc_calc(data, 2+rep_size);
+                        // Append CRC in little endian at the end of the packet
+                        data[2 + rep_size] = crc & 0xFFU;
+                        data[2 + rep_size + 1U] = crc >> 8U;
+
+                        // Update size of the reply: data + CRC + function code + slave address
+                        retcode = rep_size + 4U;
+                    }
+                    else if (ctx->mode == MODBUS_ASCII )
+                    {
+                        uint8_t lrc = modbus_lrc_calc(data, 2+rep_size);
+                        data[rep_size] = lrc & 0xFFU;
+                        // Update size of the reply: data + LRC + function code + slave address
+                        retcode = rep_size + 3U;
+                    }
+                    else if (ctx->mode == MODBUS_TCP )
+                    {
+                        // No check bytes in TCP mode
+                        // But we must indicate the Modbus frame size in the MBAP
+                        rep_size += 2U; // Add function code + slave address
+                        packet[4] = rep_size >> 8U;
+                        packet[5] = rep_size & 0xFFU;
+                        retcode = rep_size + 6U; // Add MBAP size
+                    }
                 }
-                else if (ctx->mode == MODBUS_ASCII )
-                {
-                    uint8_t lrc = modbus_lrc_calc(data, 2+rep_size);
-                    data[rep_size] = lrc & 0xFFU;
-                    // Update size of the reply: data + LRC + function code + slave address
-                    retcode = rep_size + 3U;
-                }
-                else if (ctx->mode == MODBUS_TCP )
-                {
-                    // No check bytes in TCP mode
-                    // But we must indicate the Modbus frame size in the MBAP
-                    rep_size += 2U; // Add function code + slave address
-                    packet[4] = rep_size >> 8U;
-                    packet[5] = rep_size & 0xFFU;
-                    retcode = rep_size + 6U; // Add MBAP size
-                }
+            }
+            else
+            {
+                retcode = MB_PACKET_ERROR_ADDR;
             }
         }
         else
         {
-            retcode = MB_PACKET_ERROR_ADDR;
+            retcode = MB_PACKET_ERROR_CRC;
         }
     }
     else
     {
-        retcode = MB_PACKET_ERROR_CRC;
+        retcode = MB_PACKET_ERROR_SIZE;
     }
-
 
     return retcode;
 }
