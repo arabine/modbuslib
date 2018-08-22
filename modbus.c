@@ -134,6 +134,15 @@ static inline uint16_t get_uint16(uint8_t *data)
     return val;
 }
 
+static inline uint32_t get_uint32_be(uint8_t *data)
+{
+    uint32_t val =  (uint32_t)(data[0] << 24) +
+                    (uint32_t)(data[1] << 16) +
+                    (uint32_t)(data[2] << 8) +
+                    (uint32_t)(data[3]);
+    return val;
+}
+
 static inline void set_uint16_le(uint8_t *data, uint16_t word)
 {
     data[0] = word & 0xFFU;
@@ -166,6 +175,30 @@ int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave,
     }
 
     return retcode;
+}
+
+uint32_t modbus_reply_get_u32_be(uint8_t *packet, uint8_t index)
+{
+    uint32_t value;
+
+    value = get_uint32_be(packet + 3 + index);
+
+    return value;
+}
+
+uint8_t modbus_reply_check(uint8_t *packet, uint16_t size, uint8_t slave)
+{
+    (void) size;
+    uint8_t check = 0;
+    if ((packet[0] == slave) &&     // slave is good?
+        ((packet[1]&0x80) == 0x00)  // test no exception
+       )
+    {
+        // FIXME: check CRC
+        // FIXME: check frame count
+        check = 1U;
+    }
+    return check;
 }
 
 
@@ -463,7 +496,7 @@ uint8_t modbus_write(const modbus_ctx_t *ctx, uint8_t *data, uint16_t start_addr
 
 uint8_t modbus_function6(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
-    uint16_t ret = MODBUS_ILLEGAL_DATA_VALUE;
+    uint8_t ret = MODBUS_ILLEGAL_DATA_VALUE;
     uint16_t start_addr;
 
     // Data address (2 bytes) + value (2 bytes) == 4 bytes
@@ -477,7 +510,7 @@ uint8_t modbus_function6(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, u
 
 uint8_t modbus_function16(const modbus_ctx_t *ctx, uint8_t *data, uint16_t len, uint16_t *rep_len)
 {
-   uint16_t ret = MODBUS_ILLEGAL_DATA_VALUE;
+   uint8_t ret = MODBUS_ILLEGAL_DATA_VALUE;
    uint16_t nb_words, start_addr;
 
    // Data address (2 bytes) + number of words (2 bytes) + number of bytes (1 byte) values (2+ bytes) == 7 bytes minimum
@@ -649,3 +682,5 @@ void hexdump(void *mem, unsigned int len)
 
 
 // End of file
+
+

@@ -107,6 +107,8 @@ int32_t modbus_process(modbus_ctx_t *ctx, uint8_t *packet, uint16_t length);
   * @param
   */
 int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size);
+uint8_t modbus_reply_check(uint8_t *packet, uint16_t size, uint8_t slave);
+uint32_t modbus_reply_get_u32_be(uint8_t *packet, uint8_t index);
 
 #ifdef __cplusplus
 }
