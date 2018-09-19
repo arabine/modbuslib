@@ -177,6 +177,37 @@ int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave,
     return retcode;
 }
 
+int32_t modbus_func16_request(modbus_mode_t mode, uint8_t *packet, uint8_t *wr_data, uint8_t slave, uint16_t start_addr, uint16_t nb_words)
+{
+    int32_t retcode = MB_PACKET_ERROR_SIZE;
+
+    if (mode == MODBUS_TCP)
+    {
+     // TODO
+    }
+    else if (nb_words <= MAX_WORD_TO_WRITE)
+    {
+        uint16_t nb_bytes = nb_words * 2;
+        packet[0] = slave;
+        packet[1] = 0x10U;
+        set_uint16_be(&packet[2], start_addr);
+        set_uint16_be(&packet[4], nb_words);
+        packet[6] = (uint8_t)(nb_bytes);
+
+        uint16_t index = 7U;
+        for (uint16_t i = 0U; i < nb_bytes; i++, index++)
+        {
+            packet[index] = wr_data[i];
+        }
+
+        uint16_t crc = modbus_crc_calc(packet, 7 + nb_bytes);
+        set_uint16_le(&packet[7 + nb_bytes], crc);
+        retcode = 7 + nb_bytes + 2U;
+    }
+
+    return retcode;
+}
+
 uint32_t modbus_reply_get_u32_be(uint8_t *packet, uint8_t index)
 {
     uint32_t value;
@@ -186,16 +217,35 @@ uint32_t modbus_reply_get_u32_be(uint8_t *packet, uint8_t index)
     return value;
 }
 
+uint16_t modbus_reply_get_u16_be(uint8_t *packet, uint8_t index)
+{
+    uint16_t value;
+
+    value = get_uint16(packet + 3 + index);
+
+    return value;
+}
+
+
 uint8_t modbus_reply_check(uint8_t *packet, uint16_t size, uint8_t slave)
 {
     (void) size;
     uint8_t check = 0;
-    if ((packet[0] == slave) &&     // slave is good?
-        ((packet[1]&0x80) == 0x00)  // test no exception
-       )
+    if (packet[0] == slave)     // slave is good?
     {
-        // FIXME: check CRC
-        // FIXME: check frame count
+        if ((packet[1]&0x80) == 0x00)
+        {
+            // FIXME: check CRC
+            // FIXME: check frame count
+            check = 0U; // good
+        }
+        else
+        {
+            check = 2U;
+        }
+    }
+    else
+    {
         check = 1U;
     }
     return check;
@@ -682,5 +732,3 @@ void hexdump(void *mem, unsigned int len)
 
 
 // End of file
-
-
