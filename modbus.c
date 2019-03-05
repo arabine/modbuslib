@@ -360,15 +360,15 @@ uint8_t modbus_process_pdu(modbus_ctx_t *ctx, uint8_t function_code, uint8_t *da
     case 3:
     case 4:
         retcode = modbus_function3(ctx, data, len, rep_len);
-        ctx->access = MDB_READ;
+        ctx->accessed = MDB_READ;
         break;
     case 6:
         retcode = modbus_function6(ctx, data, len, rep_len);
-        ctx->access = MDB_WRITE;
+        ctx->accessed = MDB_WRITE;
         break;
     case 16:
         retcode = modbus_function16(ctx, data, len, rep_len);
-        ctx->access = MDB_WRITE;
+        ctx->accessed = MDB_WRITE;
         break;
         // TODO: allow custom functions (call user defined function)
     default:

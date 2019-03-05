@@ -79,7 +79,7 @@ typedef struct {
 	const modbus_section_t *mapping;
     uint16_t number_of_sections;
     uint8_t result;
-    modbus_access_t access;
+    modbus_access_t accessed;
     get_reg get_cb;
     set_reg set_cb;
 } modbus_ctx_t;
