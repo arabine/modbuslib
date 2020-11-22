@@ -62,7 +62,7 @@ static const uint16_t modbus_crc_table[256] = {
 //--------------------------------------------------------------------------
 // Modbus functions
 //--------------------------------------------------------------------------
-uint8_t modbus_lrc_calc(uint8_t *data, uint16_t len)
+uint8_t modbus_lrc_calc(const uint8_t *data, uint16_t len)
 {
    uint8_t lrc = 0U;
    int i;
@@ -75,7 +75,7 @@ uint8_t modbus_lrc_calc(uint8_t *data, uint16_t len)
    return(lrc);
 }
 
-uint16_t modbus_crc_calc(uint8_t *buffer, uint16_t size)
+uint16_t modbus_crc_calc(const uint8_t *buffer, uint16_t size)
 {
    uint16_t crc = 0xFFFFU; 
    uint8_t nTemp;
@@ -95,7 +95,7 @@ static inline uint8_t modbus_crc_size(const modbus_ctx_t *ctx)
     return (ctx->mode == MODBUS_ASCII) ? 1U : (ctx->mode == MODBUS_TCP) ? 0U : 2U;
 }
 
-uint8_t modbus_check_crc(const modbus_ctx_t *ctx, uint8_t *packet, uint16_t length)
+uint8_t modbus_check_crc(const modbus_ctx_t *ctx, const uint8_t *packet, uint16_t length)
 {
     uint8_t retcode = 1U;
 
