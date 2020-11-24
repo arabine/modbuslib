@@ -88,6 +88,7 @@ typedef struct {
 // TOOLING
 //--------------------------------------------------------------------------
 uint8_t modbus_check_crc(const modbus_ctx_t *ctx, const uint8_t *packet, uint16_t length);
+uint16_t modbus_crc_calc(const uint8_t *buffer, uint16_t size);
 
 //--------------------------------------------------------------------------
 // SLAVE (SERVER) API

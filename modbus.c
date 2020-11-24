@@ -95,6 +95,8 @@ static inline uint8_t modbus_crc_size(const modbus_ctx_t *ctx)
     return (ctx->mode == MODBUS_ASCII) ? 1U : (ctx->mode == MODBUS_TCP) ? 0U : 2U;
 }
 
+#include <stdio.h>
+
 uint8_t modbus_check_crc(const modbus_ctx_t *ctx, const uint8_t *packet, uint16_t length)
 {
     uint8_t retcode = 1U;
@@ -111,7 +113,11 @@ uint8_t modbus_check_crc(const modbus_ctx_t *ctx, const uint8_t *packet, uint16_
     {
         uint16_t crc = (uint16_t)(packet[length - 1] << 8) +
                (uint16_t)(packet[length - 2]);
-        if (crc != modbus_crc_calc(packet, length - modbus_crc_size(ctx)))
+
+
+        uint16_t crcCalc = modbus_crc_calc(packet, length - modbus_crc_size(ctx));
+//        printf("CRC: %X calc: %X\r\n", crc, crcCalc);
+        if (crc != crcCalc)
         {
            retcode = 0U;
         }
