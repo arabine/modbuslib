@@ -79,7 +79,7 @@ typedef struct {
 	const modbus_section_t *mapping;
     uint16_t number_of_sections;
     uint8_t result;
-    modbus_access_t accessed;
+    modbus_access_t access;
     get_reg get_cb;
     set_reg set_cb;
 } modbus_ctx_t;
@@ -111,8 +111,11 @@ int32_t modbus_process(modbus_ctx_t *ctx, uint8_t *packet, uint16_t length);
   * @brief modbus_func3_request
   * @param
   */
-int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size);
-int32_t modbus_func16_request(modbus_mode_t mode, uint8_t *packet, uint8_t *wr_data, uint8_t slave, uint16_t start_addr, uint16_t nb_words);
+int32_t modbus_func1_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size);
+int32_t modbus_func5_6_request(uint8_t func, modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t addr, uint16_t value);
+int32_t modbus_func5_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t addr, bool force);
+int32_t modbus_func3_4_request(uint8_t func, modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size);
+int32_t modbus_func15_16_request(uint8_t func, modbus_mode_t mode, uint8_t *packet, uint8_t *wr_data, uint8_t slave, uint16_t start_addr, uint16_t nb_words);
 uint8_t modbus_reply_check(uint8_t *packet, uint16_t size, uint8_t slave);
 uint32_t modbus_reply_get_u32_be(uint8_t *packet, uint8_t index);
 uint16_t modbus_reply_get_u16_be(uint8_t *packet, uint8_t index);

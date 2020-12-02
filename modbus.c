@@ -10,6 +10,7 @@
  */
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include "modbus.h"
 
 //--------------------------------------------------------------------------
@@ -95,8 +96,6 @@ static inline uint8_t modbus_crc_size(const modbus_ctx_t *ctx)
     return (ctx->mode == MODBUS_ASCII) ? 1U : (ctx->mode == MODBUS_TCP) ? 0U : 2U;
 }
 
-#include <stdio.h>
-
 uint8_t modbus_check_crc(const modbus_ctx_t *ctx, const uint8_t *packet, uint16_t length)
 {
     uint8_t retcode = 1U;
@@ -113,11 +112,7 @@ uint8_t modbus_check_crc(const modbus_ctx_t *ctx, const uint8_t *packet, uint16_
     {
         uint16_t crc = (uint16_t)(packet[length - 1] << 8) +
                (uint16_t)(packet[length - 2]);
-
-
-        uint16_t crcCalc = modbus_crc_calc(packet, length - modbus_crc_size(ctx));
-//        printf("CRC: %X calc: %X\r\n", crc, crcCalc);
-        if (crc != crcCalc)
+        if (crc != modbus_crc_calc(packet, length - modbus_crc_size(ctx)))
         {
            retcode = 0U;
         }
@@ -161,7 +156,7 @@ static inline void set_uint16_be(uint8_t *data, uint16_t word)
     data[1] = word & 0xFFU;
 }
 
-int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size)
+int32_t modbus_func1_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size)
 {
     int32_t retcode = MB_PACKET_ERROR_SIZE;
 
@@ -172,7 +167,7 @@ int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave,
     else
     {
         packet[0] = slave;
-        packet[1] = 0x03U;
+        packet[1] = 0x01U;
         set_uint16_be(&packet[2], start_addr);
         set_uint16_be(&packet[4], size);
         uint16_t crc = modbus_crc_calc(packet, 6);
@@ -183,7 +178,30 @@ int32_t modbus_func3_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave,
     return retcode;
 }
 
-int32_t modbus_func16_request(modbus_mode_t mode, uint8_t *packet, uint8_t *wr_data, uint8_t slave, uint16_t start_addr, uint16_t nb_words)
+
+int32_t modbus_func3_4_request(uint8_t func, modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t start_addr, uint16_t size)
+{
+    int32_t retcode = MB_PACKET_ERROR_SIZE;
+
+    if (mode == MODBUS_TCP)
+    {
+     // TODO
+    }
+    else
+    {
+        packet[0] = slave;
+        packet[1] = func;
+        set_uint16_be(&packet[2], start_addr);
+        set_uint16_be(&packet[4], size);
+        uint16_t crc = modbus_crc_calc(packet, 6);
+        set_uint16_le(&packet[6], crc);
+        retcode = 8U;
+    }
+
+    return retcode;
+}
+
+int32_t modbus_func15_16_request(uint8_t func, modbus_mode_t mode, uint8_t *packet, uint8_t *wr_data, uint8_t slave, uint16_t start_addr, uint16_t nb_words)
 {
     int32_t retcode = MB_PACKET_ERROR_SIZE;
 
@@ -195,7 +213,7 @@ int32_t modbus_func16_request(modbus_mode_t mode, uint8_t *packet, uint8_t *wr_d
     {
         uint16_t nb_bytes = nb_words * 2;
         packet[0] = slave;
-        packet[1] = 0x10U;
+        packet[1] = func;
         set_uint16_be(&packet[2], start_addr);
         set_uint16_be(&packet[4], nb_words);
         packet[6] = (uint8_t)(nb_bytes);
@@ -212,6 +230,34 @@ int32_t modbus_func16_request(modbus_mode_t mode, uint8_t *packet, uint8_t *wr_d
     }
 
     return retcode;
+}
+
+int32_t modbus_func5_6_request(uint8_t func, modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t addr, uint16_t value)
+{
+    int32_t retcode = MB_PACKET_ERROR_SIZE;
+
+    if (mode == MODBUS_TCP)
+    {
+     // TODO
+    }
+    else
+    {
+        packet[0] = slave;
+        packet[1] = func;
+        set_uint16_be(&packet[2], addr);
+        set_uint16_be(&packet[4], value);
+
+        uint16_t crc = modbus_crc_calc(packet, 6);
+        set_uint16_le(&packet[6], crc);
+        retcode = 8;
+    }
+
+    return retcode;
+}
+
+int32_t modbus_func5_request(modbus_mode_t mode, uint8_t *packet, uint8_t slave, uint16_t addr, bool force)
+{
+    return modbus_func5_6_request(5, mode, packet, slave, addr, force ? (0xFF00) : 0);
 }
 
 uint32_t modbus_reply_get_u32_be(uint8_t *packet, uint8_t index)
@@ -366,15 +412,15 @@ uint8_t modbus_process_pdu(modbus_ctx_t *ctx, uint8_t function_code, uint8_t *da
     case 3:
     case 4:
         retcode = modbus_function3(ctx, data, len, rep_len);
-        ctx->accessed = MDB_READ;
+        ctx->access = MDB_READ;
         break;
     case 6:
         retcode = modbus_function6(ctx, data, len, rep_len);
-        ctx->accessed = MDB_WRITE;
+        ctx->access = MDB_WRITE;
         break;
     case 16:
         retcode = modbus_function16(ctx, data, len, rep_len);
-        ctx->accessed = MDB_WRITE;
+        ctx->access = MDB_WRITE;
         break;
         // TODO: allow custom functions (call user defined function)
     default:
