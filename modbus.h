@@ -46,7 +46,8 @@ extern "C"
 #define MAX_WORD_TO_WRITE     123
 #define MAX_MODBUS_LENGTH     256
 #define MAX_DATA_LENGTH       253
-
+#define MAX_WORD_TO_WRITE_FUNC23    121
+#define MAX_BYTES_FUNC_23     (MAX_WORD_TO_WRITE_FUNC23 * 2)
 
 typedef enum {
    MODBUS_RTU,
